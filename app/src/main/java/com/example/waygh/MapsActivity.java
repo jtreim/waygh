@@ -11,6 +11,7 @@ import android.location.Location;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Pair;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -30,26 +31,29 @@ import java.lang.reflect.Array;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
 
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
 
     private GoogleMap mMap;
+    private TextView elapsedTimeText;
+    private TextView latitudeText;
+    private TextView longitudeText;
+
     private FusedLocationProviderClient locationClient;
-    private ArrayList<Pair<LocalTime, Location>> routePoints;
+    private ArrayList<Pair<Date, Location>> routePoints;
     private Polyline route;
-    private Marker currentPos;
-    private Marker startPos;
-    private LocalTime startTime;
-    private int index;
+    private Location startPos;
+    private Date startTime;
 
     private Handler gpsPoller;
 
     public static final int MY_PERMISSIONS_REQUEST_ACCESS_LOCATION = 1;
     private static final LatLng PROVO = new LatLng(40.2338, -111.6585);
-    private static final LatLng OREM = new LatLng(41.296898, -112.694649);
-    private static final LatLng PG = new LatLng(42.340845, -113.717548);
-    private static final LatLng RANDOM = new LatLng(40.400000, -111.720000);
-    private ArrayList<LatLng> points;
+//    private static final LatLng OREM = new LatLng(41.296898, -112.694649);
+//    private static final LatLng PG = new LatLng(42.340845, -113.717548);
+//    private static final LatLng RANDOM = new LatLng(40.400000, -111.720000);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,15 +62,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
+        elapsedTimeText = this.findViewById(R.id.timerTextView);
+        latitudeText = this.findViewById(R.id.latitudeTextView);
+        longitudeText = this.findViewById(R.id.longitudeTextView);
         mapFragment.getMapAsync(this);
         routePoints = new ArrayList<>();
         locationClient = LocationServices.getFusedLocationProviderClient(this);
-        points = new ArrayList<>();
-        points.add(PROVO);
-        points.add(OREM);
-        points.add(PG);
-        points.add(RANDOM);
-        index = 1;
         addLocationPoint();
 
         gpsPoller = new Handler();
@@ -97,47 +98,33 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 @Override
                 public void onSuccess(Location location) {
                     if(location != null && mMap != null){
-                        LocalTime currentTime = LocalTime.now();
-//                        routePoints.add(new Pair<>(currentTime, location));
-                        Location next = new Location("");
-                        next.setLatitude(points.get(index).latitude);
-                        next.setLongitude(points.get(index).longitude);
-                        routePoints.add(new Pair<>(currentTime, next));
-                        index = (index + 1) % points.size();
+                        Date currentTime = Calendar.getInstance().getTime();
+                        routePoints.add(new Pair<>(currentTime, location));
                         LatLng pos = new LatLng(location.getLatitude(), location.getLongitude());
-                        if(currentPos != null){
-                            currentPos.setPosition(pos);
-                            LocalTime diff = LocalTime.now().minusNanos(startTime.toNanoOfDay());
-                            currentPos.setTitle("Elapsed time: " + diff.format(
-                                    DateTimeFormatter.ofPattern("H:m")));
+                        longitudeText.setText(Double.toString(pos.longitude));
+                        latitudeText.setText(Double.toString(pos.latitude));
+                        if(routePoints.size() > 1){
                             route.setPoints(getPoints());
-//                            Toast.makeText(getParent(),
-//                                    "Last position added: " + routePoints.get(routePoints.size() - 1),
-//                                    Toast.LENGTH_SHORT).show();
-                        } else if (routePoints.size() > 0){
-                            startTime = LocalTime.now();
-                            Location last = routePoints.get(routePoints.size() - 1).second;
-                            LatLng lastPos = new LatLng(last.getLatitude(), last.getLongitude());
-                            MarkerOptions opt = new MarkerOptions();
-//                          startPos = mMap.addMarker(opt.position(lastPos).title(
-//                                  "Started: " + startTime.format(
-//                                          DateTimeFormatter.ofPattern("H:m"))));
-//                          currentPos = mMap.addMarker(opt.position(lastPos).title(
-//                                  "Elapsed time: 00:00"));
-                            startPos = mMap.addMarker(opt.position(PROVO).title(
-                                    "Started: " + startTime.format(
-                                            DateTimeFormatter.ofPattern("H:m"))));
-                            currentPos = mMap.addMarker(opt
-                                    .position(lastPos)
-                                    .title("Elapsed time: 00:00"));
+                        } else if (routePoints.size() == 1){
+                            startTime = Calendar.getInstance().getTime();
+                            startPos = location;
                             PolylineOptions polylineOptions = new PolylineOptions();
-                            polylineOptions.add(startPos.getPosition());
+                            polylineOptions.add(pos);
                             route = mMap.addPolyline(polylineOptions);
-                        } else {
-                            currentPos = mMap.addMarker(new MarkerOptions().position(PROVO).title(
-                                    currentTime.format(DateTimeFormatter.ISO_TIME)));
+                            mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(pos, 19.0f));
                         }
-//                      mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(pos, 19.0f));
+                        long diff = Calendar.getInstance().getTime().getTime() - startTime.getTime();
+                        long diffSec = diff / 1000 % 60;
+                        long diffMin = diff / (60 * 1000) % 60;
+                        long diffHour = diff / (60 * 60 * 1000) % 24;
+                        StringBuilder elapsedTime = new StringBuilder();
+                        elapsedTime.append(diffHour);
+                        elapsedTime.append(" hr ");
+                        elapsedTime.append(diffMin);
+                        elapsedTime.append(" min ");
+                        elapsedTime.append(diffSec);
+                        elapsedTime.append(" sec");
+                        elapsedTimeText.setText(elapsedTime.toString());
                     }
                 }
             });
